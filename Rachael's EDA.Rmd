@@ -1,0 +1,319 @@
+---
+title: "STATS501 EDA"
+author: "Rachael Gu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load in Data
+
+```{r}
+crimes <- read.csv("Crimes_2001_to_Present.csv")
+head(crimes)
+```
+
+```{r}
+nrow(crimes)
+```
+
+```{r}
+sapply(crimes, typeof)
+```
+
+# Data Inspection
+
+```{r}
+library(lubridate)
+
+crimes$date_parsed <- mdy_hms(crimes$Date)
+crimes$month <- month(crimes$date_parsed)
+crimes$month_name <- month(crimes$date_parsed, label = TRUE)
+crimes$year <- year(crimes$date_parsed)
+crimes$hour <- hour(crimes$date_parsed) 
+```
+
+```{r}
+head(crimes, 20)
+```
+
+```{r}
+summary(crimes)
+```
+
+*Variables with Missing Values:* District, Ward, Community.Area, X.Coordinate, Y.Coordinate, Latitude, and Longitude (mostly a problem for questions related to where the crime occurred)
+
+
+\newpage
+
+
+# Question 2
+How do crime counts change across time (years, months, and potentially time of day)?
+
+# a. Yearly Crime Counts
+
+```{r}
+addmargins(table(crimes$year))
+```
+
+```{r, warning = FALSE}
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+yearly_crime_counts <- crimes %>%
+  group_by(year) %>%
+  summarise(count = n())
+
+ggplot(yearly_crime_counts, aes(x = year, y = count)) +
+  geom_line(color = "lightblue", size = 1) +
+  geom_point(color = "blue", size = 2) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Chicago Yearly Crime Counts",
+       x = "Year",
+       y = "Number of Crimes") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+Note: Data for 2025 is incomplete
+Crimes have been steadily decreasing from 2001. There was a drop in number of crimes during covid.
+
+# b. Hour of the Day Crime Counts
+
+```{r}
+addmargins(table(crimes$hour))
+```
+
+```{r}
+hourly_crime_counts <- crimes %>%
+  group_by(hour) %>%
+  summarise(count = n())
+
+ggplot(hourly_crime_counts, aes(x = hour, y = count)) +
+  geom_col() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Chicago Hourly Crime Counts",
+    x = "Hour of the Day",
+    y = "Number of Crimes"
+  ) +
+  theme_minimal()
+```
+
+Most crimes occur during the afternoon and evenings (especially midnight)
+
+# c. Monthly Crime Counts
+
+```{r}
+# remove year 2025
+
+crimes_no2025 <- crimes[crimes$year != 2025, ]
+nrow(crimes_no2025)
+```
+
+```{r}
+addmargins(table(crimes_no2025$month_name))
+```
+
+```{r}
+monthly_crime_counts <- crimes_no2025 %>%
+  group_by(month_name) %>%
+  summarise(count = n())
+
+ggplot(monthly_crime_counts, aes(x = month_name, y = count)) +
+  geom_col() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Chicago Monthly Crime Counts (Excluding 2025)",
+    x = "Month",
+    y = "Number of Crimes"
+  ) +
+  theme_minimal()
+```
+
+No big differences in number of crimes committed per month but it seems like summer months have slightly higher rates of crime
+
+# d. Heatmap of Crime Counts by Month and Year 
+
+```{r}
+crime_monthly_by_year <- crimes %>%
+  group_by(year, month_name) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(crime_monthly_by_year, aes(x = month_name, y = factor(year), fill = count)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(
+    title = "Heatmap of Chicago Crime Counts by Month and Year",
+    x = "Month",
+    y = "Year",
+    fill = "Crime Count"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text = element_text(size = 10)
+  )
+
+```
+
+
+\newpage
+
+
+# Question 3
+What is the relationship between location characteristics (e.g., location description, district, beat) and crime frequency?
+
+# a. Beat (no missing values)
+
+```{r}
+# determine top Beats with the highest and lowest number of crimes
+
+beat_summary <- crimes %>%
+  group_by(Beat) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  arrange(desc(count))
+
+top_beats <- beat_summary %>% slice_head(n = 6)
+bottom_beats <- beat_summary %>% slice_tail(n = 6)
+
+top_beats
+bottom_beats
+```
+
+```{r}
+top_beats_records <- crimes[crimes$Beat %in% c(421, 423, 1834, 624, 511, 1533), ]
+
+crime_yearly_by_topBeats <- top_beats_records %>%
+  group_by(year, Beat) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(crime_yearly_by_topBeats, aes(x = year, y = count, color = factor(Beat), group = Beat)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Yearly Crime Counts by Top 6 Beats",
+    x = "Year",
+    y = "Number of Crimes",
+    color = "Beat"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+Out of the top 6 beats that have the largest number of crimes, five of them show a steady decrease in crimes by year except for 1834
+
+```{r}
+bottom_beats_records <- crimes[crimes$Beat %in% bottom_beats$Beat, ]
+
+crime_yearly_by_bottomBeats <- bottom_beats_records %>%
+  group_by(year, Beat) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(crime_yearly_by_bottomBeats, aes(x = year, y = count, color = factor(Beat), group = Beat)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Yearly Crime Counts by Bottom 6 Beats",
+    x = "Year",
+    y = "Number of Crimes",
+    color = "Beat"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+# b. District (47 missing values ~ negligible)
+
+```{r}
+# determine top Districts with the highest and lowest number of crimes
+
+district_summary <- crimes %>%
+  group_by(District) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  arrange(desc(count))
+
+top_districts <- district_summary %>% slice_head(n = 6)
+bottom_districts <- district_summary %>% slice_tail(n = 6)
+
+top_districts
+bottom_districts
+```
+
+```{r}
+top_districts_records <- crimes[crimes$District %in% top_districts$District, ]
+
+crime_yearly_by_topDistricts <- top_districts_records %>%
+  group_by(year, District) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(crime_yearly_by_topDistricts, aes(x = year, y = count, color = factor(District), group = District)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Yearly Crime Counts by Top 6 Districts",
+    x = "Year",
+    y = "Number of Crimes",
+    color = "District"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+```{r, warning = FALSE}
+bottom_districts_records <- crimes[crimes$District %in% bottom_districts$District, ]
+
+crime_yearly_by_bottomDistricts <- bottom_districts_records %>%
+  group_by(year, District) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(crime_yearly_by_bottomDistricts, aes(x = year, y = count, color = factor(District), group = District)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Yearly Crime Counts by Bottom 6 Districts",
+    x = "Year",
+    y = "Number of Crimes",
+    color = "District"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+```
+
+# c. Ward (614822 missing values ~ 7.3%)
+
+# d. Community Area (613687 missing values ~ 7.3%)
+
+
+
+
+
